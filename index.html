@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Underground Santa</title>
+<style>
+    canvas {
+        display: block;
+        margin: 0 auto;
+        background: #111;
+    }
+    body { text-align:center; color:white; font-family: sans-serif; }
+</style>
+</head>
+<body>
+<h1>Underground Santa</h1>
+<canvas id="gameCanvas" width="1000" height="600"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Load images
+const santaImg = new Image(); santaImg.src = "santa.png";
+const rockImg = new Image(); rockImg.src = "rock.png";
+const bombImg = new Image(); bombImg.src = "bomb.png";
+const coinImg = new Image(); coinImg.src = "coin.png";
+const diamondImg = new Image(); diamondImg.src = "diamond.png";
+const bgImg = new Image(); bgImg.src = "background.png";
+
+// Load sounds
+const bgMusic = new Audio("jingle.ogg"); bgMusic.loop = true; bgMusic.volume = 0.3;
+const collisionSound = new Audio("fahhh.ogg"); collisionSound.volume = 0.5;
+const winSound = new Audio("hamood.ogg"); winSound.volume = 0.5;
+
+// Game variables
+let santa = {x:200, y:450, w:60, h:80, vy:0, jumps:0};
+const gravity = 1;
+const maxJumps = 2;
+let speed = 6;
+let score = 0;
+let targetScore = 50;
+let gameOver = false;
+let youWin = false;
+let gameStarted = false;
+let lastRoundScore = 0;
+
+let obstacles = [];
+let coins = [];
+let diamonds = [];
+let bombs = [];
+
+const tips = [
+    "Pro tip: Santa loves cookies, not bombs!",
+    "Jump like no one's watching... except the rocks.",
+    "Diamonds are forever, but you have 2 jumps only!",
+    "Coins are good, but survival is better.",
+    "Careful! Rocks are Santa’s least favorite gifts.",
+    "Remember: Gravity is real, jumps are temporary.",
+    "Santa says: Keep calm and jump twice!",
+];
+let currentTip = tips[Math.floor(Math.random()*tips.length)];
+
+// Keyboard input
+const keys = {};
+document.addEventListener("keydown", e => {
+    keys[e.code] = true;
+    if(e.code === "Enter" && !gameStarted){
+        gameStarted = true;
+        resetGame();
+        bgMusic.play();
+    }
+    if(e.code === "Space" && santa.jumps < maxJumps && !gameOver && !youWin){
+        santa.vy = santa.jumps===0?-20:-15;
+        santa.jumps +=1;
+    }
+    if(e.code === "KeyR" && (gameOver || youWin)){
+        resetGame();
+        bgMusic.play();
+    }
+});
+document.addEventListener("keyup", e => { keys[e.code] = false; });
+
+// Spawn objects
+let lastObstacleX = canvas.width;
+function spawnObjects(){
+    if(canvas.width - lastObstacleX > 350){
+        if(Math.random()*80<1){
+            obstacles.push({x:canvas.width, y:480, w:50, h:50});
+            lastObstacleX = canvas.width;
+        } else if(Math.random()*120<1){
+            bombs.push({x:canvas.width, y:480, w:50, h:50});
+            lastObstacleX = canvas.width;
+        }
+    }
+    if(Math.random()*25<1){
+        coins.push({x:canvas.width, y:350+Math.random()*100, w:30, h:30});
+    }
+    if(Math.random()*100<1){
+        diamonds.push({x:canvas.width, y:300+Math.random()*150, w:35, h:35});
+    }
+}
+
+// Reset game
+function resetGame(){
+    obstacles = [];
+    bombs = [];
+    coins = [];
+    diamonds = [];
+    speed = 6;
+    lastRoundScore = score;
+    score = 0;
+    gameOver = false;
+    youWin = false;
+    santa.y = 450;
+    santa.vy = 0;
+    santa.jumps = 0;
+}
+
+// Collision check
+function rectCollide(a,b){
+    return a.x < b.x + b.w &&
+           a.x + a.w > b.x &&
+           a.y < b.y + b.h &&
+           a.y + a.h > b.y;
+}
+
+// Main game loop
+function gameLoop(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    
+    // Draw background
+    if(bgImg.complete) ctx.drawImage(bgImg,0,0,canvas.width,canvas.height);
+    
+    if(!gameStarted){
+        ctx.fillStyle="white";
+        ctx.font="40px sans-serif";
+        ctx.fillText("UNDERGROUND SANTA", canvas.width/2-220,150);
+        ctx.fillText("Press ENTER to Start", canvas.width/2-180,250);
+        ctx.fillText("Last Round Score: "+lastRoundScore, canvas.width/2-150,350);
+        ctx.font="25px sans-serif";
+        ctx.fillText(currentTip, canvas.width/2-250,400);
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
+    if(!gameOver && !youWin){
+        // Update Santa
+        santa.vy += gravity;
+        santa.y += santa.vy;
+        if(santa.y>450){
+            santa.y=450;
+            santa.vy=0;
+            santa.jumps=0;
+        }
+        speed +=0.004;
+        spawnObjects();
+
+        // Obstacles
+        obstacles.forEach((obs,i)=>{
+            obs.x -= speed;
+            if(rectCollide(santa, obs)){
+                if(!gameOver) collisionSound.play();
+                gameOver = true;
+                bgMusic.pause();
+            }
+            if(obs.x<-60) obstacles.splice(i,1);
+        });
+
+        // Bombs
+        bombs.forEach((b,i)=>{
+            b.x -= speed;
+            if(rectCollide(santa, b)){
+                if(!gameOver) collisionSound.play();
+                gameOver = true;
+                bgMusic.pause();
+            }
+            if(b.x<-60) bombs.splice(i,1);
+        });
+
+        // Coins
+        coins.forEach((c,i)=>{
+            c.x -= speed;
+            if(rectCollide(santa, c)){
+                score +=3;
+                coins.splice(i,1);
+            } else if(c.x<-40) coins.splice(i,1);
+        });
+
+        // Diamonds
+        diamonds.forEach((d,i)=>{
+            d.x -= speed;
+            if(rectCollide(santa, d)){
+                score +=10;
+                diamonds.splice(i,1);
+            } else if(d.x<-40) diamonds.splice(i,1);
+        });
+
+        lastObstacleX -= speed;
+
+        if(score>=targetScore && !youWin){
+            youWin=true;
+            targetScore+=1;
+            bgMusic.pause();
+            winSound.play();
+        }
+    }
+
+    // Draw ground
+    ctx.fillStyle="gray";
+    ctx.fillRect(0,520,canvas.width,80);
+
+    // Draw Santa
+    if(santaImg.complete) ctx.drawImage(santaImg, santa.x, santa.y, santa.w, santa.h);
+
+    // Draw obstacles
+    obstacles.forEach(obs => { if(rockImg.complete) ctx.drawImage(rockImg, obs.x, obs.y, obs.w, obs.h); });
+    bombs.forEach(b => { if(bombImg.complete) ctx.drawImage(bombImg, b.x, b.y, b.w, b.h); });
+    coins.forEach(c => { if(coinImg.complete) ctx.drawImage(coinImg, c.x, c.y, c.w, c.h); });
+    diamonds.forEach(d => { if(diamondImg.complete) ctx.drawImage(diamondImg, d.x, d.y, d.w, d.h); });
+
+    // Draw scores
+    ctx.fillStyle="white";
+    ctx.font="30px sans-serif";
+    ctx.fillText("Score: "+score,20,40);
+    ctx.fillText("Target: "+targetScore,20,80);
+    ctx.fillStyle="yellow";
+    ctx.fillText("Last Round: "+lastRoundScore, canvas.width-250,40);
+
+    if(gameOver){
+        ctx.fillStyle="white";
+        ctx.font="40px sans-serif";
+        ctx.fillText("GAME OVER - Press R to Restart",200,250);
+    }
+    if(youWin){
+        ctx.fillStyle="green";
+        ctx.font="40px sans-serif";
+        ctx.fillText("YOU WIN! Press R for Next Round",220,250);
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
